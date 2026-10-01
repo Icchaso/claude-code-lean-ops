@@ -1,0 +1,38 @@
+name: selftest
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        node: [18, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # このマシンにある全シェル（Windows: PowerShell 5.1 / 7 / Git Bash、macOS: zsh / bash / sh / pwsh）で
+      # 要約・失敗行の保持・日本語・終了コードを検証
+      - name: Self-test on every available shell
+        run: node install.cjs --test
+
+      # 一時ディレクトリに対して 導入 → 再導入（冪等性）→ 検証 → 削除
+      - name: Install / reinstall / verify / uninstall
+        shell: bash
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude
+        run: |
+          node install.cjs
+          node install.cjs
+          node install.cjs --test
+          node install.cjs --uninstall
+          node -e "const s=require(process.env.CLAUDE_CONFIG_DIR+'/settings.json'); if (JSON.stringify(s).includes('lean-ops')) { console.error('uninstall left entries'); process.exit(1) }"
